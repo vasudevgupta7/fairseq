@@ -1,0 +1,53 @@
+# @package _group_
+# fairseq-hydra-train \
+#   task.data=dataset \
+#   --config-dir=examples/iitm-tts/config \
+#   --config-name=transformers-tts
+
+common:
+  # fp16: true
+  log_format: json
+  log_interval: 10
+  wandb_project: iitm-tts
+  tpu: False
+
+checkpoint:
+  save_dir: tts-ckpt
+  save_interval: 1
+  no_epoch_checkpoints: false
+
+task:
+  _name: text_to_speech
+  data: ???
+  max-source-positions: 1024
+  max-target-positions: 1200
+  n-frames-per-step: 1
+
+  eos-prob-threshold: 0.5
+  vocoder: griffin_lim
+
+dataset:
+  num_workers: 4
+  # max_tokens: 3800000
+  validate_interval: 1
+  batch_size: 32
+
+criterion:
+  _name: tacotron2
+
+optimization:
+  # max_update: 400000
+  lr: [1.e-4]
+
+optimizer:
+  _name: adam
+  adam_betas: (0.9,0.98)
+  adam_eps: 1e-06
+  weight_decay: 0.01
+
+lr_scheduler:
+  _name: tri_stage
+  phase_ratio: [0.03,0.9,0.07]
+
+model:
+  _name: tts_transformer
