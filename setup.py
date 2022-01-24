@@ -156,7 +156,7 @@ except ImportError:
     pass
 
 
-if "READTHEDOCS" in os.environ:
+if False:
     # don't build extensions when generating docs
     extensions = []
     if "build_ext" in cmdclass:
@@ -218,10 +218,8 @@ def do_setup(package_data):
             'numpy; python_version>="3.7"',
             "regex",
             "sacrebleu>=1.4.12",
-            "torch",
             "tqdm",
             "bitarray",
-            "torchaudio>=0.8.0",
         ],
         dependency_links=dependency_links,
         packages=find_packages(
