@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
 import soundfile as sf
 import torch
 from tqdm.auto import tqdm
@@ -10,6 +11,8 @@ from tqdm.auto import tqdm
 from examples.speech_synthesis.data_utils import (  # get_global_cmvn,
     extract_logmel_spectrogram, ipa_phonemize)
 from fairseq.data.audio.audio_utils import convert_waveform
+from collections import Counter
+from typing import List
 
 
 @dataclass
@@ -51,6 +54,17 @@ def extract_features(path: Path, config: AudioFeaturesConfig):
     return features
 
 
+def create_vocabfile(filename: Path, tgt_text: List[str]):
+    vocab = Counter()
+    for t in tgt_text:
+        vocab.update(t.split(" "))
+    print("Vocab Size:", len(vocab))
+
+    with open(filename, "w") as f:
+        for s, c in vocab.most_common():
+            f.write(f"{s} {c}\n")
+
+
 def main():
     config = AudioFeaturesConfig()
     data_dir = Path("data") / "male"
@@ -72,23 +86,53 @@ def main():
     tsv_data = {k: [] for k in ["id", "audio", "n_frames", "tgt_text"]}
     total = len([None for _ in data_dir.iterdir()])
     for sample_path in tqdm(data_dir.iterdir(), total=total):
-        melspec = extract_features(sample_path, config).numpy()
-
         sample_id = sample_path.name[:-4]
+
+        melspec = extract_features(sample_path, config).numpy()
         np.save(features_dir / f"{sample_id}.npy", melspec)
+        tsv_data["n_frames"].append(len(melspec))
+
+        tsv_data["audio"].append(f"{features_dir.name}/{sample_id}.npy")
+        tsv_data["id"].append(sample_id)
 
         text = sample_ids_to_texts[sample_id]
-
-        tsv_data["audio"].append(sample_path.name)
-        tsv_data["id"].append(sample_id)
-        tsv_data["n_frames"].append(len(melspec))
         tsv_data["tgt_text"].append(text)
 
     tsv_data["tgt_text"] = ipa_phonemize(tsv_data["tgt_text"], lang=lang)
 
     tsv_data = pd.DataFrame.from_dict(tsv_data)
     print(tsv_data)
-    tsv_data.to_csv(output_dir / "train.tsv")
+    tsv_data.to_csv(output_dir / "train.tsv", index=False, sep="\t")
+
+    vocab_filename = output_dir / "vocab.txt"
+    create_vocabfile(vocab_filename, tsv_data["tgt_text"])
+
+    extra = {
+        "sample_rate": config.sample_rate,
+        "features": {
+            "type": "spectrogram+melscale+log",
+            "eps": 1e-5,
+            "n_mels": config.n_mels,
+            "n_fft": config.n_fft,
+            "window_fn": "hann",
+            "win_length": config.win_length,
+            "hop_length": config.hop_length,
+            "sample_rate": config.sample_rate,
+            "win_len_t": config.win_length / config.sample_rate,
+            "hop_len_t": config.hop_length / config.sample_rate,
+            "f_min": config.f_min,
+            "f_max": config.f_max,
+            "n_stft": config.n_fft // 2 + 1,
+        },
+    }
+    extra.update(
+        {
+            "audio_root": output_dir.as_posix(),
+            "vocab_filename": vocab_filename.name,
+        }
+    )
+    with open(output_dir / "config.yaml", "w") as f:
+        yaml.dump(extra, f)
 
 
 if __name__ == "__main__":
